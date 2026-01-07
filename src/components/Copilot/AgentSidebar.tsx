@@ -39,13 +39,36 @@ export default function AgentSidebar({ isOpen, onClose }: AgentSidebarProps) {
         setInputValue('');
         setIsTyping(true);
 
-        // Simulate network delay and "thinking"
-        setTimeout(() => {
-            const responseText = generateResponse(content);
-            const botMsg: Message = { id: (Date.now() + 1).toString(), role: 'assistant', text: responseText };
+        try {
+            const res = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: content,
+                    contextData: dashboardData
+                })
+            });
+
+            if (!res.ok) {
+                // Flashback to simulation if API fails (e.g. running locally without Vercel)
+                console.warn("API call failed, falling back to simulation.");
+                throw new Error("API failed");
+            }
+
+            const data = await res.json();
+            const botMsg: Message = { id: (Date.now() + 1).toString(), role: 'assistant', text: data.reply };
             setMessages(prev => [...prev, botMsg]);
+
+        } catch (error) {
+            // Fallback Simulation logic ensures the demo never breaks
+            setTimeout(() => {
+                const responseText = generateResponse(content) + " <br/><br/><i>(Live AI unavailable locally. Using simulation.)</i>";
+                const botMsg: Message = { id: (Date.now() + 1).toString(), role: 'assistant', text: responseText };
+                setMessages(prev => [...prev, botMsg]);
+            }, 1000);
+        } finally {
             setIsTyping(false);
-        }, 1500);
+        }
     };
 
     const generateResponse = (query: string) => {

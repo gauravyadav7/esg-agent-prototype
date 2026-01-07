@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-green: #00C853;
+  --color-brand-darkGreen: #2E7D32;
+  --color-brand-blue: #2196F3;
+  --color-brand-yellow: #FFEB3B;
+  --color-brand-bg: #eef2f6;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-brand-bg);
+    color: var(--color-gray-800);
+    /* v4 uses oklch, but tailwindcss/colors should work if mapped or just use hex */
+    /* actually, text-gray-800 is a utility class, but @apply might be tricky if not set. 
+       Let's just use utility class on Body tag in index.html or standard css property */
+    color: #1f2937;
+  }
+}

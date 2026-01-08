@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { X, Send, Sparkles, Bot, User } from 'lucide-react';
 import clsx from 'clsx';
 import { dashboardData } from '../../data/mockData';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 interface AgentSidebarProps {
     isOpen: boolean;
@@ -16,7 +17,7 @@ interface Message {
 
 export default function AgentSidebar({ isOpen, onClose }: AgentSidebarProps) {
     const [messages, setMessages] = useState<Message[]>([
-        { id: '1', role: 'assistant', text: "Hello! I'm your ESG Copilot. I've analyzed your current carbon footprint. How can I help you today?" }
+        { id: '1', role: 'assistant', text: "Hello! I'm your ESG Copilot. I'm connected to the **Live Gemini AI**. How can I help you today?" }
     ]);
     const [inputValue, setInputValue] = useState('');
     const [isTyping, setIsTyping] = useState(false);
@@ -40,54 +41,73 @@ export default function AgentSidebar({ isOpen, onClose }: AgentSidebarProps) {
         setIsTyping(true);
 
         try {
-            const res = await fetch('/api/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    message: content,
-                    contextData: dashboardData
-                })
-            });
+            let replyText = "";
 
-            if (!res.ok) {
-                // Flashback to simulation if API fails (e.g. running locally without Vercel)
-                console.warn("API call failed, falling back to simulation.");
-                throw new Error("API failed");
+            // HYBRID APPROACH:
+            // 1. If running locally with VITE_GEMINI_API_KEY, use direct SDK (bypasses need for local backend).
+            // 2. Otherwise, assume we are in production (Vercel) and use the serverless function.
+
+            const localKey = import.meta.env.VITE_GEMINI_API_KEY;
+
+            if (localKey) {
+                console.log("Using Local Client-Side Gemini Key");
+                const genAI = new GoogleGenerativeAI(localKey);
+                const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
+                const prompt = `
+                  You are an expert ESG AI analyst for "Clenergize".
+                  Dashboard Data: ${JSON.stringify(dashboardData)}
+                  User Question: "${content}"
+                  
+                  Answer concisely based on the data.
+                `;
+
+                const result = await model.generateContent(prompt);
+                replyText = result.response.text();
+            } else {
+                console.log("Using Serverless Function /api/chat");
+                const res = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message: content,
+                        contextData: dashboardData
+                    })
+                });
+
+                if (!res.ok) {
+                    throw new Error(`API Error: ${res.statusText}`);
+                }
+                const data = await res.json();
+                replyText = data.reply;
             }
 
-            const data = await res.json();
-            const botMsg: Message = { id: (Date.now() + 1).toString(), role: 'assistant', text: data.reply };
+            const botMsg: Message = { id: (Date.now() + 1).toString(), role: 'assistant', text: replyText };
             setMessages(prev => [...prev, botMsg]);
 
-        } catch (error) {
-            // Fallback Simulation logic ensures the demo never breaks
-            setTimeout(() => {
-                const responseText = generateResponse(content) + " <br/><br/><i>(Live AI unavailable locally. Using simulation.)</i>";
-                const botMsg: Message = { id: (Date.now() + 1).toString(), role: 'assistant', text: responseText };
-                setMessages(prev => [...prev, botMsg]);
-            }, 1000);
+        } catch (error: any) {
+            console.error("Agent Error Details:", error);
+
+            // Debugging helper: check if key is loaded
+            const hasKey = !!import.meta.env.VITE_GEMINI_API_KEY;
+            console.log("DEBUG: VITE_GEMINI_API_KEY loaded?", hasKey);
+
+            let debugMsg = "";
+            if (!hasKey) {
+                debugMsg = "\n\n**DEBUG CAUSE**: `VITE_GEMINI_API_KEY` is missing or undefined. The app fell back to `/api/chat` which failed (expected locally).";
+            } else {
+                debugMsg = `\n\n**DEBUG ERROR**: ${error.message || JSON.stringify(error)}`;
+            }
+
+            const errorMsg: Message = {
+                id: (Date.now() + 1).toString(),
+                role: 'assistant',
+                text: "⚠️ **Connection Error**: " + debugMsg
+            };
+            setMessages(prev => [...prev, errorMsg]);
         } finally {
             setIsTyping(false);
         }
-    };
-
-    const generateResponse = (query: string) => {
-        const lowerQuery = query.toLowerCase();
-
-        if (lowerQuery.includes('total') || lowerQuery.includes('emission')) {
-            return `Your total emissions are **${dashboardData.totalEmissions} Tons CO₂e**. This is primarily driven by Scope 1 (${dashboardData.scope1} tons), while Scope 2 and 3 are currently zero.`;
-        }
-        if (lowerQuery.includes('reduce') || lowerQuery.includes('recommendation')) {
-            return "Based on your data, **Sodium Bicarbonate** is the largest contributor (40 tons). I recommend switching to a lower-carbon alternative or optimizing the process usage. Would you like me to simulate the impact of a 10% reduction?";
-        }
-        if (lowerQuery.includes('scope 1')) {
-            return "Scope 1 accounts for 100% of your current emissions footprint. Major contributors include Sodium Bicarbonate and Row-jet Kerosene.";
-        }
-        if (lowerQuery.includes('sodium')) {
-            return "**Sodium Bicarbonate** contributes 40 Tons CO₂e, which is approximately 84.5% of your total emissions.";
-        }
-
-        return "I can help you analyze your carbon footprint data. Try asking about 'Total Emissions', 'Scope 1 Breakdown', or 'Reduction Strategies'.";
     };
 
     const suggestions = [
@@ -109,7 +129,7 @@ export default function AgentSidebar({ isOpen, onClose }: AgentSidebarProps) {
                     </div>
                     <div>
                         <h2 className="font-bold text-gray-800">ESG Copilot</h2>
-                        <p className="text-xs text-gray-500">AI-powered insights</p>
+                        <p className="text-xs text-gray-500">Live Gemini Enabled</p>
                     </div>
                 </div>
                 <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-full transition-colors">
@@ -133,7 +153,7 @@ export default function AgentSidebar({ isOpen, onClose }: AgentSidebarProps) {
                                 ? "bg-white text-gray-700 rounded-tl-none border border-gray-100"
                                 : "bg-brand-blue text-white rounded-tr-none"
                         )}>
-                            <p dangerouslySetInnerHTML={{ __html: msg.text.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>') }} />
+                            <p dangerouslySetInnerHTML={{ __html: msg.text.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br/>') }} />
                         </div>
                     </div>
                 ))}

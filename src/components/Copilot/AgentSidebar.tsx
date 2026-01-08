@@ -52,14 +52,27 @@ export default function AgentSidebar({ isOpen, onClose }: AgentSidebarProps) {
             if (localKey) {
                 console.log("Using Local Client-Side Gemini Key");
                 const genAI = new GoogleGenerativeAI(localKey);
-                const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+                // Gemini 2.0 Flash supports Google Search Grounding
+                const model = genAI.getGenerativeModel({
+                    model: "gemini-2.0-flash",
+                    // @ts-ignore - googleSearch is supported in v1beta but types might lag
+                    tools: [{ googleSearch: {} }]
+                });
 
                 const prompt = `
                   You are an expert ESG AI analyst for "Clenergize".
+                  
+                  CAPABILITIES:
+                  - You can access the company's internal dashboard data (provided below).
+                  - You can SEARCH THE WEB for the latest external ESG news, benchmarks, and regulations.
+                  
                   Dashboard Data: ${JSON.stringify(dashboardData)}
                   User Question: "${content}"
                   
-                  Answer concisely based on the data.
+                  INSTRUCTIONS:
+                  - If the user asks about the company's specific data, use the Dashboard Data.
+                  - If the user asks about external news, trends, or regulations, USE GOOGLE SEARCH to get the latest info.
+                  - Citations from search are helpful.
                 `;
 
                 const result = await model.generateContent(prompt);
@@ -113,7 +126,7 @@ export default function AgentSidebar({ isOpen, onClose }: AgentSidebarProps) {
     const suggestions = [
         "What is my total emission?",
         "How can I reduce emissions?",
-        "Show me Scope 1 breakdown"
+        "Latest ESG News"
     ];
 
     return (

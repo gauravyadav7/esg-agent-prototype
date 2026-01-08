@@ -14,18 +14,22 @@ export default async function handler(request, response) {
 
     try {
         const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+        const model = genAI.getGenerativeModel({
+            model: "gemini-2.0-flash",
+            tools: [{ googleSearch: {} }]
+        });
 
         const prompt = `
       You are an expert ESG (Environmental, Social, and Governance) AI analyst for a company called "Clenergize".
       
+      CAPABILITIES:
+      - You can access the company's internal dashboard data (provided below).
+      - You can SEARCH THE WEB for the latest external ESG news, benchmarks, and regulations.
+      
       Here is the current carbon footprint dashboard data for the company:
       ${JSON.stringify(contextData, null, 2)}
 
-      Your goal is to answer the user's question based strictly on this data.
-      - Be concise and professional.
-      - If the answer is not in the data, say you don't know.
-      - Use markdown formatting (bolding, lists) to make it readable.
+      Your goal is to answer the user's question based on the Data AND External News if relevant.
       - "Scope 1" means direct emissions (fuel).
       - "Scope 2" means indirect emissions (electricity).
       - "Scope 3" means all other indirect emissions.
